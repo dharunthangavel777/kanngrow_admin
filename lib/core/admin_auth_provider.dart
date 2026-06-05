@@ -1,6 +1,4 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
@@ -16,14 +14,20 @@ class AdminAuthProvider extends ChangeNotifier {
   String? get error => _error;
   bool get isLoading => _isLoading;
 
+  AdminAuthProvider() {
+    _init();
+  }
+
+  void _init() {
+    FirebaseAuth.instance.authStateChanges().listen((user) {
+      _isLoggedIn = user != null;
+      _email = user?.email;
+      notifyListeners();
+    });
+  }
+
   String get _baseUrl {
-    String host = 'localhost';
-    if (!kIsWeb) {
-      try {
-        if (Platform.isAndroid) host = '10.0.2.2';
-      } catch (_) {}
-    }
-    return 'http://$host:3000/api/v1/admin/auth';
+    return 'https://kanngrowbackend-production.up.railway.app/api/v1/admin/auth';
   }
 
   Future<bool> sendOtp(String email) async {

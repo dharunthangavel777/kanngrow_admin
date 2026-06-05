@@ -1,74 +1,166 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dashboard_service.dart';
+import '../ai_management/ai_management_service.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
   @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  bool _loading = true;
+  DashboardStats? _stats;
+  AiUsageReport? _aiReport;
+  int _activeBusinesses = 0;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDashboardData();
+  }
+
+  Future<void> _loadDashboardData() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final stats = await DashboardService.getStats();
+      final aiReport = await AiManagementService().getUsageStats(days: 30);
+      final profilesSnap = await FirebaseFirestore.instance.collection('profiles').count().get();
+
+      if (mounted) {
+        setState(() {
+          _stats = stats;
+          _aiReport = aiReport;
+          _activeBusinesses = profilesSnap.count ?? 0;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to load dashboard data: $e';
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_error != null) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(_error!, style: const TextStyle(color: Colors.red)),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _loadDashboardData,
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final totalUsers = _stats?.totalUsers ?? 0;
+    final totalTokens = _aiReport?.summary.totalTokens ?? 0;
+    final totalCost = _aiReport?.summary.totalCost ?? 0.0;
+
     return Scaffold(
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Dashboard Overview', style: Theme.of(context).textTheme.displayLarge),
-            const SizedBox(height: 24),
-            // Metric Cards
-            Wrap(
-              spacing: 24,
-              runSpacing: 24,
-              children: const [
-                _MetricCard(title: 'Total Users', value: '12,450', trend: '+14%', isPositive: true),
-                _MetricCard(title: 'Active Businesses', value: '3,210', trend: '+8%', isPositive: true),
-                _MetricCard(title: 'AI Tokens Used', value: '45.2M', trend: '+22%', isPositive: false),
-                _MetricCard(title: 'Est. AI Cost', value: '\$1,450', trend: '-5%', isPositive: true),
-              ],
-            ),
-            const SizedBox(height: 32),
-            // Charts Area
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('User Growth', style: Theme.of(context).textTheme.titleLarge),
-                          const SizedBox(height: 24),
-                          SizedBox(
-                            height: 300,
-                            child: _UserGrowthChart(),
-                          ),
-                        ],
+      body: RefreshIndicator(
+        onRefresh: _loadDashboardData,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Dashboard Overview', style: Theme.of(context).textTheme.displayLarge),
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    onPressed: _loadDashboardData,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              // Metric Cards
+              Wrap(
+                spacing: 24,
+                runSpacing: 24,
+                children: [
+                  _MetricCard(title: 'Total Users', value: '$totalUsers', trend: 'Live', isPositive: true),
+                  _MetricCard(title: 'Active Businesses', value: '$_activeBusinesses', trend: 'Live', isPositive: true),
+                  _MetricCard(title: 'AI Tokens Used', value: '${(totalTokens / 1000000.0).toStringAsFixed(1)}M', trend: '30d', isPositive: false),
+                  _MetricCard(title: 'Est. AI Cost', value: '\$${totalCost.toStringAsFixed(2)}', trend: '30d', isPositive: true),
+                ],
+              ),
+              const SizedBox(height: 32),
+              // Charts Area
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('AI Cost Trend (30 Days)', style: Theme.of(context).textTheme.titleLarge),
+                            const SizedBox(height: 24),
+                            SizedBox(
+                              height: 300,
+                              child: _aiReport != null && _aiReport!.dailyChart.isNotEmpty
+                                  ? _AiCostChart(dailyChart: _aiReport!.dailyChart)
+                                  : const Center(child: Text('No historical usage data yet.')),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 24),
-                Expanded(
-                  flex: 1,
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Live Activities', style: Theme.of(context).textTheme.titleLarge),
-                          const SizedBox(height: 16),
-                          const _ActivityList(),
-                        ],
+                  const SizedBox(width: 24),
+                  Expanded(
+                    flex: 1,
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Live Activities', style: Theme.of(context).textTheme.titleLarge),
+                            const SizedBox(height: 16),
+                            const _ActivityList(),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -129,29 +221,49 @@ class _MetricCard extends StatelessWidget {
   }
 }
 
-class _UserGrowthChart extends StatelessWidget {
+class _AiCostChart extends StatelessWidget {
+  final List<DailyChartPoint> dailyChart;
+  const _AiCostChart({required this.dailyChart});
+
   @override
   Widget build(BuildContext context) {
+    final spots = <FlSpot>[];
+    for (int i = 0; i < dailyChart.length; i++) {
+      spots.add(FlSpot(i.toDouble(), dailyChart[i].cost));
+    }
+
     return LineChart(
       LineChartData(
         gridData: const FlGridData(show: false),
-        titlesData: const FlTitlesData(
-          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 30, interval: 1)),
+        titlesData: FlTitlesData(
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 30,
+              interval: dailyChart.length > 7 ? (dailyChart.length / 5).floor().toDouble() : 1,
+              getTitlesWidget: (value, meta) {
+                final idx = value.toInt();
+                if (idx >= 0 && idx < dailyChart.length) {
+                  final dateStr = dailyChart[idx].date;
+                  final parts = dateStr.split('-');
+                  if (parts.length >= 3) {
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Text('${parts[1]}/${parts[2]}', style: const TextStyle(fontSize: 10)),
+                    );
+                  }
+                }
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
         ),
         borderData: FlBorderData(show: false),
         lineBarsData: [
           LineChartBarData(
-            spots: const [
-              FlSpot(0, 1),
-              FlSpot(1, 1.5),
-              FlSpot(2, 1.4),
-              FlSpot(3, 3.4),
-              FlSpot(4, 2),
-              FlSpot(5, 2.2),
-              FlSpot(6, 4.8),
-            ],
+            spots: spots,
             isCurved: true,
             color: Theme.of(context).primaryColor,
             barWidth: 4,
@@ -172,17 +284,64 @@ class _ActivityList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: 5,
-      separatorBuilder: (_, __) => const Divider(),
-      itemBuilder: (context, index) {
-        return ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: const CircleAvatar(child: Icon(Icons.person, size: 16)),
-          title: Text('User joined new startup', style: Theme.of(context).textTheme.bodyLarge),
-          subtitle: const Text('2 mins ago'),
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .orderBy('createdAt', descending: true)
+          .limit(5)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 24.0),
+              child: Text('No recent activities.', style: TextStyle(color: Colors.grey)),
+            ),
+          );
+        }
+
+        final docs = snapshot.data!.docs;
+
+        return ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: docs.length,
+          separatorBuilder: (_, __) => const Divider(),
+          itemBuilder: (context, index) {
+            final user = docs[index].data() as Map<String, dynamic>;
+            final name = user['displayName'] ?? user['name'] ?? 'Founder';
+            final createdAt = user['createdAt'] as String? ?? '';
+            String timeStr = 'Recently';
+            if (createdAt.isNotEmpty) {
+              try {
+                final date = DateTime.parse(createdAt);
+                final diff = DateTime.now().difference(date);
+                if (diff.inMinutes < 60) {
+                  timeStr = '${diff.inMinutes} mins ago';
+                } else if (diff.inHours < 24) {
+                  timeStr = '${diff.inHours} hours ago';
+                } else {
+                  timeStr = '${diff.inDays} days ago';
+                }
+              } catch (_) {}
+            }
+
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(
+                backgroundColor: Theme.of(context).primaryColor.withOpacity(0.2),
+                child: Text(
+                  name.isNotEmpty ? name[0].toUpperCase() : 'F',
+                  style: TextStyle(color: Theme.of(context).primaryColor, fontSize: 12),
+                ),
+              ),
+              title: Text('$name joined Kangrow', style: Theme.of(context).textTheme.bodyLarge),
+              subtitle: Text(timeStr),
+            );
+          },
         );
       },
     );

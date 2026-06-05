@@ -1,7 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-class ChatLogsScreen extends StatelessWidget {
+class ChatLogsScreen extends StatefulWidget {
   const ChatLogsScreen({super.key});
+
+  @override
+  State<ChatLogsScreen> createState() => _ChatLogsScreenState();
+}
+
+class _ChatLogsScreenState extends State<ChatLogsScreen> {
+  Map<String, dynamic>? _selectedSession;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.toLowerCase();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,8 +51,9 @@ class ChatLogsScreen extends StatelessWidget {
                           Padding(
                             padding: const EdgeInsets.all(16.0),
                             child: TextField(
+                              controller: _searchController,
                               decoration: InputDecoration(
-                                hintText: 'Search sessions...',
+                                hintText: 'Search sessions by title...',
                                 prefixIcon: const Icon(Icons.search),
                                 filled: true,
                                 fillColor: Theme.of(context).scaffoldBackgroundColor,
@@ -39,17 +66,57 @@ class ChatLogsScreen extends StatelessWidget {
                           ),
                           const Divider(height: 1),
                           Expanded(
-                            child: ListView.separated(
-                              itemCount: 10,
-                              separatorBuilder: (_, _) => const Divider(height: 1),
-                              itemBuilder: (context, index) {
-                                return ListTile(
-                                  leading: const CircleAvatar(child: Icon(Icons.chat)),
-                                  title: Text('Session #100${9 - index}'),
-                                  subtitle: const Text('Validation Discussion'),
-                                  trailing: const Text('2h ago', style: TextStyle(fontSize: 12)),
-                                  selected: index == 0,
-                                  selectedTileColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                            child: StreamBuilder<QuerySnapshot>(
+                              stream: FirebaseFirestore.instance
+                                  .collectionGroup('chatSessions')
+                                  .orderBy('updatedAt', descending: true)
+                                  .snapshots(),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState == ConnectionState.waiting) {
+                                  return const Center(child: CircularProgressIndicator());
+                                }
+                                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                                  return const Center(child: Text('No chat sessions found.'));
+                                }
+
+                                var docs = snapshot.data!.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
+
+                                if (_searchQuery.isNotEmpty) {
+                                  docs = docs.where((doc) {
+                                    final title = (doc['title'] ?? '').toString().toLowerCase();
+                                    return title.contains(_searchQuery);
+                                  }).toList();
+                                }
+
+                                return ListView.separated(
+                                  itemCount: docs.length,
+                                  separatorBuilder: (_, _) => const Divider(height: 1),
+                                  itemBuilder: (context, index) {
+                                    final session = docs[index];
+                                    final isSelected = _selectedSession != null && _selectedSession!['id'] == session['id'];
+
+                                    return StreamBuilder<DocumentSnapshot>(
+                                      stream: FirebaseFirestore.instance.collection('users').doc(session['uid']).snapshots(),
+                                      builder: (context, userSnap) {
+                                        final userName = userSnap.hasData && userSnap.data!.exists
+                                            ? ((userSnap.data!.data() as Map<String, dynamic>?)?['displayName'] ?? 'Founder')
+                                            : 'Founder';
+
+                                        return ListTile(
+                                          leading: const CircleAvatar(child: Icon(Icons.chat)),
+                                          title: Text(session['title'] ?? 'Chat Session'),
+                                          subtitle: Text('User: $userName'),
+                                          selected: isSelected,
+                                          selectedTileColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                                          onTap: () {
+                                            setState(() {
+                                              _selectedSession = session;
+                                            });
+                                          },
+                                        );
+                                      },
+                                    );
+                                  },
                                 );
                               },
                             ),
@@ -63,40 +130,78 @@ class ChatLogsScreen extends StatelessWidget {
                   Expanded(
                     flex: 2,
                     child: Card(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.all(24.0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      child: _selectedSession == null
+                          ? const Center(child: Text('Select a conversation to view details'))
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Session #1009 Details', style: Theme.of(context).textTheme.titleLarge),
-                                ElevatedButton.icon(
-                                  onPressed: () {},
-                                  icon: const Icon(Icons.download),
-                                  label: const Text('Export Transcript'),
+                                Padding(
+                                  padding: const EdgeInsets.all(24.0),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          '${_selectedSession!['title'] ?? 'Session'} Details',
+                                          style: Theme.of(context).textTheme.titleLarge,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      ElevatedButton.icon(
+                                        onPressed: () {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('Export functionality coming soon')),
+                                          );
+                                        },
+                                        icon: const Icon(Icons.download),
+                                        label: const Text('Export'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Divider(height: 1),
+                                Expanded(
+                                  child: StreamBuilder<QuerySnapshot>(
+                                    stream: FirebaseFirestore.instance
+                                        .collection('users')
+                                        .doc(_selectedSession!['uid'])
+                                        .collection('chatSessions')
+                                        .doc(_selectedSession!['id'])
+                                        .collection('messages')
+                                        .orderBy('createdAt', descending: false)
+                                        .snapshots(),
+                                    builder: (context, snapshot) {
+                                      if (snapshot.connectionState == ConnectionState.waiting) {
+                                        return const Center(child: CircularProgressIndicator());
+                                      }
+                                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                                        return const Center(child: Text('No messages in this conversation.'));
+                                      }
+
+                                      final messages = snapshot.data!.docs;
+
+                                      return ListView.builder(
+                                        padding: const EdgeInsets.all(24.0),
+                                        itemCount: messages.length,
+                                        itemBuilder: (context, idx) {
+                                          final msg = messages[idx].data() as Map<String, dynamic>;
+                                          final role = msg['role'] as String? ?? 'user';
+                                          final content = msg['content'] as String? ?? '';
+                                          final isAi = role == 'assistant';
+
+                                          return Padding(
+                                            padding: const EdgeInsets.only(bottom: 16.0),
+                                            child: _ChatBubble(text: content, isAi: isAi),
+                                          );
+                                        },
+                                      );
+                                    },
+                                  ),
                                 ),
                               ],
                             ),
-                          ),
-                          const Divider(height: 1),
-                          Expanded(
-                            child: ListView(
-                              padding: const EdgeInsets.all(24.0),
-                              children: const [
-                                _ChatBubble(text: 'I want to build a pet supply store.', isAi: false),
-                                SizedBox(height: 16),
-                                _ChatBubble(text: 'That sounds great! A pet supply store has a strong market. Are you focusing on a specific niche, like organic pet food or dog toys?', isAi: true),
-                                SizedBox(height: 16),
-                                _ChatBubble(text: 'Organic dog food.', isAi: false),
-                                SizedBox(height: 16),
-                                _ChatBubble(text: 'Excellent choice. The organic pet food market is growing rapidly. Let\'s validate this idea...', isAi: true),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
                   ),
                 ],

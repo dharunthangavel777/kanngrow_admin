@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ValidationScreen extends StatelessWidget {
   const ValidationScreen({super.key});
@@ -28,17 +29,62 @@ class ValidationScreen extends StatelessWidget {
                       ],
                     ),
                     const Divider(height: 32),
-                    ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: 8,
-                      separatorBuilder: (_, __) => const Divider(height: 32),
-                      itemBuilder: (context, index) {
-                        return _ValidationRow(
-                          ideaName: 'Eco-Friendly Tech Accessories ${index + 1}',
-                          marketScore: 90 - (index * 4),
-                          competitionScore: 60 + (index * 5),
-                          riskLevel: index % 3 == 0 ? 'High' : (index % 2 == 0 ? 'Low' : 'Medium'),
+                    StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance.collectionGroup('workspace').snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+                        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                          return const Center(child: Text('No validation reports found.'));
+                        }
+
+                        final docs = snapshot.data!.docs
+                            .map((doc) => doc.data() as Map<String, dynamic>)
+                            .where((doc) => doc['type'] == 'validation')
+                            .toList();
+
+                        // Sort by createdAt descending
+                        docs.sort((a, b) {
+                          final aTime = a['createdAt'] as String? ?? '';
+                          final bTime = b['createdAt'] as String? ?? '';
+                          return bTime.compareTo(aTime);
+                        });
+
+                        if (docs.isEmpty) {
+                          return const Center(child: Text('No validation reports found.'));
+                        }
+
+                        return ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: docs.length,
+                          separatorBuilder: (_, __) => const Divider(height: 32),
+                          itemBuilder: (context, index) {
+                            final report = docs[index];
+                            final productName = report['productName'] ?? 'Business Concept';
+                            final data = report['data'] as Map<String, dynamic>? ?? {};
+                            final overallScore = (data['overallScore'] ?? 0) as int;
+                            
+                            final dimensions = data['dimensions'] as Map<String, dynamic>? ?? {};
+                            final compData = dimensions['competition'] as Map<String, dynamic>? ?? {};
+                            final competitionScore = (compData['score'] ?? 0) as int;
+
+                            final riskData = dimensions['riskLevel'] as Map<String, dynamic>? ?? {};
+                            final riskScore = (riskData['score'] ?? 0) as int;
+                            
+                            String riskLevel = 'Medium';
+                            if (riskScore > 70) riskLevel = 'High';
+                            if (riskScore < 40) riskLevel = 'Low';
+
+                            return _ValidationRow(
+                              ideaName: productName,
+                              marketScore: overallScore,
+                              competitionScore: competitionScore,
+                              riskLevel: riskLevel,
+                              details: data,
+                            );
+                          },
                         );
                       },
                     ),
@@ -65,12 +111,14 @@ class _ValidationRow extends StatelessWidget {
   final int marketScore;
   final int competitionScore;
   final String riskLevel;
+  final Map<String, dynamic> details;
 
   const _ValidationRow({
     required this.ideaName,
     required this.marketScore,
     required this.competitionScore,
     required this.riskLevel,
+    required this.details,
   });
 
   Color _getRiskColor() {
@@ -84,6 +132,42 @@ class _ValidationRow extends StatelessWidget {
       default:
         return Colors.grey;
     }
+  }
+
+  void _showDetails(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF111827),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(ideaName, style: const TextStyle(color: Colors.white)),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Overall Score: $marketScore/100', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text('Verdict: ${details['verdict'] ?? ""}', style: const TextStyle(color: Colors.white)),
+              const SizedBox(height: 16),
+              const Text('Top Risks:', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+              for (final risk in (details['topRisks'] as List<dynamic>? ?? []))
+                Text('• $risk', style: const TextStyle(color: Colors.white70)),
+              const SizedBox(height: 16),
+              const Text('Quick Wins:', style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+              for (final win in (details['quickWins'] as List<dynamic>? ?? []))
+                Text('• $win', style: const TextStyle(color: Colors.white70)),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close', style: TextStyle(color: Colors.cyan)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -125,7 +209,7 @@ class _ValidationRow extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: IconButton(
               icon: const Icon(Icons.arrow_forward_ios, size: 16),
-              onPressed: () {},
+              onPressed: () => _showDetails(context),
             ),
           ),
         ),

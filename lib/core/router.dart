@@ -16,6 +16,7 @@ import '../features/analytics/analytics_screen.dart';
 import '../features/feedback/feedback_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/auth/auth_screen.dart';
+import '../features/knowledge/knowledge_manager_screen.dart';
 import 'admin_auth_provider.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
@@ -63,6 +64,7 @@ final GoRouter adminRouter = GoRouter(
         GoRoute(path: '/analytics', builder: (context, state) => const AnalyticsScreen()),
         GoRoute(path: '/feedback', builder: (context, state) => const FeedbackScreen()),
         GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
+        GoRoute(path: '/knowledge', builder: (context, state) => const KnowledgeManagerScreen()),
       ],
     ),
   ],

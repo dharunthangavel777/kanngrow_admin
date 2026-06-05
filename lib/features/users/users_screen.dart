@@ -1,7 +1,145 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'users_service.dart';
 
-class UsersScreen extends StatelessWidget {
+class UsersScreen extends StatefulWidget {
   const UsersScreen({super.key});
+
+  @override
+  State<UsersScreen> createState() => _UsersScreenState();
+}
+
+class _UsersScreenState extends State<UsersScreen> {
+  List<AdminUser> _users = [];
+  List<AdminUser> _filteredUsers = [];
+  bool _loading = true;
+  String? _error;
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUsers();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadUsers() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final list = await UsersService.getUsers();
+      if (mounted) {
+        setState(() {
+          _users = list;
+          _filteredUsers = list;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to load users: $e';
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  void _onSearchChanged() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      if (query.isEmpty) {
+        _filteredUsers = _users;
+      } else {
+        _filteredUsers = _users.where((u) {
+          return u.name.toLowerCase().contains(query) ||
+              u.email.toLowerCase().contains(query) ||
+              u.id.toLowerCase().contains(query);
+        }).toList();
+      }
+    });
+  }
+
+  Future<void> _suspendUser(String id, String name) async {
+    try {
+      await UsersService.suspendUser(id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Suspended user $name'), backgroundColor: Colors.orange),
+        );
+        _loadUsers();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to suspend user: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _restoreUser(String id, String name) async {
+    try {
+      await UsersService.restoreUser(id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Restored user $name'), backgroundColor: Colors.green),
+        );
+        _loadUsers();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to restore user: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteUser(String id, String name) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Delete'),
+        content: Text('Are you sure you want to delete user $name? This will soft delete their record.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await UsersService.deleteUser(id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Deleted user $name'), backgroundColor: Colors.red),
+          );
+          _loadUsers();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to delete user: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -16,11 +154,9 @@ class UsersScreen extends StatelessWidget {
               children: [
                 Text('Users Management', style: Theme.of(context).textTheme.displayLarge),
                 ElevatedButton.icon(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invite user functionality coming soon')));
-                  },
-                  icon: const Icon(Icons.add),
-                  label: const Text('Invite User'),
+                  onPressed: _loadUsers,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Refresh'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).primaryColor,
                     foregroundColor: Colors.white,
@@ -37,6 +173,7 @@ class UsersScreen extends StatelessWidget {
                   children: [
                     // Search Bar
                     TextField(
+                      controller: _searchController,
                       decoration: InputDecoration(
                         hintText: 'Search users by name, email, or ID...',
                         prefixIcon: const Icon(Icons.search),
@@ -51,32 +188,49 @@ class UsersScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    // Table Header
-                    Row(
-                      children: [
-                        Expanded(flex: 2, child: Text('NAME', style: _headerStyle(context))),
-                        Expanded(flex: 3, child: Text('EMAIL', style: _headerStyle(context))),
-                        Expanded(flex: 2, child: Text('STARTUP PHASE', style: _headerStyle(context))),
-                        Expanded(flex: 2, child: Text('STATUS', style: _headerStyle(context))),
-                        const SizedBox(width: 48), // For action menu
-                      ],
-                    ),
-                    const Divider(height: 32),
-                    // Table Content (Mock Data)
-                    ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: 8,
-                      separatorBuilder: (_, __) => const Divider(height: 32),
-                      itemBuilder: (context, index) {
-                        return _UserRow(
-                          name: 'Founder ${index + 1}',
-                          email: 'founder${index + 1}@startup.com',
-                          phase: index % 3 == 0 ? 'Validation' : 'Ideation',
-                          isActive: index % 4 != 0,
-                        );
-                      },
-                    ),
+                    if (_loading)
+                      const Center(child: CircularProgressIndicator())
+                    else if (_error != null)
+                      Center(
+                        child: Column(
+                          children: [
+                            Text(_error!, style: const TextStyle(color: Colors.red)),
+                            const SizedBox(height: 8),
+                            ElevatedButton(onPressed: _loadUsers, child: const Text('Retry')),
+                          ],
+                        ),
+                      )
+                    else if (_filteredUsers.isEmpty)
+                      const Center(child: Text('No users found.'))
+                    else ...[
+                      // Table Header
+                      Row(
+                        children: [
+                          Expanded(flex: 2, child: Text('NAME', style: _headerStyle(context))),
+                          Expanded(flex: 3, child: Text('EMAIL', style: _headerStyle(context))),
+                          Expanded(flex: 2, child: Text('STARTUP PHASE', style: _headerStyle(context))),
+                          Expanded(flex: 2, child: Text('STATUS', style: _headerStyle(context))),
+                          const SizedBox(width: 48), // For action menu
+                        ],
+                      ),
+                      const Divider(height: 32),
+                      // Table Content (Real Data)
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _filteredUsers.length,
+                        separatorBuilder: (_, __) => const Divider(height: 32),
+                        itemBuilder: (context, index) {
+                          final user = _filteredUsers[index];
+                          return _UserRow(
+                            user: user,
+                            onSuspend: () => _suspendUser(user.id, user.name),
+                            onRestore: () => _restoreUser(user.id, user.name),
+                            onDelete: () => _deleteUser(user.id, user.name),
+                          );
+                        },
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -96,16 +250,16 @@ class UsersScreen extends StatelessWidget {
 }
 
 class _UserRow extends StatelessWidget {
-  final String name;
-  final String email;
-  final String phase;
-  final bool isActive;
+  final AdminUser user;
+  final VoidCallback onSuspend;
+  final VoidCallback onRestore;
+  final VoidCallback onDelete;
 
   const _UserRow({
-    required this.name,
-    required this.email,
-    required this.phase,
-    required this.isActive,
+    required this.user,
+    required this.onSuspend,
+    required this.onRestore,
+    required this.onDelete,
   });
 
   void _showActionDialog(BuildContext context) {
@@ -116,28 +270,30 @@ class _UserRow extends StatelessWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const Icon(Icons.visibility),
-              title: const Text('View Details'),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Viewing user details...')));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.block, color: Colors.orange),
-              title: const Text('Suspend User'),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User suspended.')));
-              },
-            ),
+            if (user.isActive)
+              ListTile(
+                leading: const Icon(Icons.block, color: Colors.orange),
+                title: const Text('Suspend User'),
+                onTap: () {
+                  Navigator.pop(context);
+                  onSuspend();
+                },
+              )
+            else
+              ListTile(
+                leading: const Icon(Icons.check_circle_outline, color: Colors.green),
+                title: const Text('Restore User'),
+                onTap: () {
+                  Navigator.pop(context);
+                  onRestore();
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.delete, color: Colors.red),
               title: const Text('Delete User', style: TextStyle(color: Colors.red)),
               onTap: () {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User deleted.')));
+                onDelete();
               },
             ),
           ],
@@ -156,20 +312,35 @@ class _UserRow extends StatelessWidget {
             children: [
               CircleAvatar(
                 backgroundColor: Theme.of(context).primaryColor.withOpacity(0.2),
-                child: Text(name[0], style: TextStyle(color: Theme.of(context).primaryColor)),
+                child: Text(
+                  user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
+                  style: TextStyle(color: Theme.of(context).primaryColor),
+                ),
               ),
               const SizedBox(width: 16),
-              Text(name, style: Theme.of(context).textTheme.bodyLarge),
+              Expanded(
+                child: Text(user.name, style: Theme.of(context).textTheme.bodyLarge, overflow: TextOverflow.ellipsis),
+              ),
             ],
           ),
         ),
         Expanded(
           flex: 3,
-          child: Text(email, style: Theme.of(context).textTheme.bodyMedium),
+          child: Text(user.email, style: Theme.of(context).textTheme.bodyMedium),
         ),
         Expanded(
           flex: 2,
-          child: Text(phase, style: Theme.of(context).textTheme.bodyMedium),
+          child: StreamBuilder<DocumentSnapshot>(
+            stream: FirebaseFirestore.instance.collection('profiles').doc(user.id).snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData || !snapshot.data!.exists) {
+                return const Text('Ideation', style: TextStyle(color: Colors.grey));
+              }
+              final data = snapshot.data!.data() as Map<String, dynamic>?;
+              final stage = data?['stage'] ?? 'Ideation';
+              return Text(stage.toString());
+            },
+          ),
         ),
         Expanded(
           flex: 2,
@@ -178,13 +349,13 @@ class _UserRow extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
-                color: (isActive ? Colors.green : Colors.grey).withOpacity(0.1),
+                color: (user.isActive ? Colors.green : Colors.grey).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                isActive ? 'Active' : 'Inactive',
+                user.isActive ? 'Active' : 'Suspended',
                 style: TextStyle(
-                  color: isActive ? Colors.green : Colors.grey,
+                  color: user.isActive ? Colors.green : Colors.grey,
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
                 ),
