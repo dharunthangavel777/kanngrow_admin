@@ -76,8 +76,10 @@ class _Sidebar extends StatelessWidget {
           _NavItem(title: 'Roadmaps', icon: Icons.map_outlined, route: '/roadmaps', currentPath: location, onTap: onTap),
           
           _SectionHeader(title: 'AI & DATA'),
-          _NavItem(title: 'Knowledge Base', icon: Icons.auto_stories_outlined, route: '/knowledge', currentPath: location, onTap: onTap),
+          _NavItem(title: 'Platform Context', icon: Icons.push_pin_outlined, route: '/platform-context', currentPath: location, onTap: onTap),
+          _NavItem(title: 'User DNA Insights', icon: Icons.insights_outlined, route: '/user-dna', currentPath: location, onTap: onTap),
           _NavItem(title: 'AI Cost Center', icon: Icons.memory, route: '/ai', currentPath: location, onTap: onTap),
+          _NavItem(title: 'Hot News', icon: Icons.local_fire_department_rounded, route: '/hot-news', currentPath: location, onTap: onTap),
           _NavItem(title: 'Chat Logs', icon: Icons.chat_bubble_outline, route: '/chat', currentPath: location, onTap: onTap),
           _NavItem(title: 'Analytics', icon: Icons.bar_chart, route: '/analytics', currentPath: location, onTap: onTap),
           

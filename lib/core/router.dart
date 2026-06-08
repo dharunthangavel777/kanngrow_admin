@@ -16,7 +16,9 @@ import '../features/analytics/analytics_screen.dart';
 import '../features/feedback/feedback_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/auth/auth_screen.dart';
-import '../features/knowledge/knowledge_manager_screen.dart';
+import '../features/platform_context/platform_context_screen.dart';
+import '../features/user_intelligence/user_dna_dashboard_screen.dart';
+import '../features/hot_news/hot_news_screen.dart';
 import 'admin_auth_provider.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
@@ -64,7 +66,9 @@ final GoRouter adminRouter = GoRouter(
         GoRoute(path: '/analytics', builder: (context, state) => const AnalyticsScreen()),
         GoRoute(path: '/feedback', builder: (context, state) => const FeedbackScreen()),
         GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
-        GoRoute(path: '/knowledge', builder: (context, state) => const KnowledgeManagerScreen()),
+        GoRoute(path: '/platform-context', builder: (context, state) => const PlatformContextScreen()),
+        GoRoute(path: '/user-dna', builder: (context, state) => const UserDnaDashboardScreen()),
+        GoRoute(path: '/hot-news', builder: (context, state) => const HotNewsScreen()),
       ],
     ),
   ],
