@@ -115,6 +115,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
               const SizedBox(height: 32),
+              Text('Subscribers Overview', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 24,
+                runSpacing: 24,
+                children: [
+                  _MetricCard(title: 'Paid Subscribers', value: '${_stats?.paidSubscribers ?? 0}', trend: 'Payment', isPositive: true),
+                  _MetricCard(title: 'Admin Assigned', value: '${_stats?.adminAssignedSubscribers ?? 0}', trend: 'Manual', isPositive: true),
+                  _MetricCard(title: 'Trial Subscribers', value: '${_stats?.trialSubscribers ?? 0}', trend: 'Trial', isPositive: true),
+                  _MetricCard(title: 'Lifetime Access', value: '${_stats?.lifetimeSubscribers ?? 0}', trend: 'Lifetime', isPositive: true),
+                ],
+              ),
+              const SizedBox(height: 32),
+              Text('Tier Distribution', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 24,
+                runSpacing: 24,
+                children: [
+                  _MetricCard(title: 'Free Plan', value: '${_stats?.freeUsers ?? 0}', trend: 'Free', isPositive: true),
+                  _MetricCard(title: 'Standard Plan', value: '${_stats?.standardUsers ?? 0}', trend: 'Standard', isPositive: true),
+                  _MetricCard(title: 'Premium Plan', value: '${_stats?.premiumUsers ?? 0}', trend: 'Premium', isPositive: true),
+                  _MetricCard(title: 'Enterprise Plan', value: '${_stats?.enterpriseUsers ?? 0}', trend: 'Enterprise', isPositive: true),
+                ],
+              ),
+              const SizedBox(height: 32),
               // Charts Area
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -286,8 +312,8 @@ class _ActivityList extends StatelessWidget {
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
-          .collection('users')
-          .orderBy('createdAt', descending: true)
+          .collection('audit_logs')
+          .orderBy('timestamp', descending: true)
           .limit(5)
           .snapshots(),
       builder: (context, snapshot) {
@@ -298,7 +324,7 @@ class _ActivityList extends StatelessWidget {
           return const Center(
             child: Padding(
               padding: EdgeInsets.symmetric(vertical: 24.0),
-              child: Text('No recent activities.', style: TextStyle(color: Colors.grey)),
+              child: Text('No manual plan changes yet.', style: TextStyle(color: Colors.grey)),
             ),
           );
         }
@@ -311,13 +337,33 @@ class _ActivityList extends StatelessWidget {
           itemCount: docs.length,
           separatorBuilder: (_, __) => const Divider(),
           itemBuilder: (context, index) {
-            final user = docs[index].data() as Map<String, dynamic>;
-            final name = user['displayName'] ?? user['name'] ?? 'Founder';
-            final createdAt = user['createdAt'] as String? ?? '';
+            final log = docs[index].data() as Map<String, dynamic>;
+            final adminName = log['admin_name'] ?? 'Admin';
+            final userName = log['user_name'] ?? 'Founder';
+            final newPlan = log['new_plan'] as String? ?? 'free';
+            final sourceType = log['source_type'] as String? ?? 'admin_assignment';
+            final reason = log['reason'] as String? ?? '';
+            final timestamp = log['timestamp'] as String? ?? '';
+            
+            final planStr = newPlan.toUpperCase();
+            
+            String sourceStr = '';
+            if (sourceType == 'trial') {
+              sourceStr = 'Trial';
+            } else if (sourceType == 'promo') {
+              sourceStr = 'Promo';
+            } else if (sourceType == 'lifetime') {
+              sourceStr = 'Lifetime';
+            } else if (sourceType == 'admin_assignment') {
+              sourceStr = 'Manual';
+            } else {
+              sourceStr = sourceType;
+            }
+
             String timeStr = 'Recently';
-            if (createdAt.isNotEmpty) {
+            if (timestamp.isNotEmpty) {
               try {
-                final date = DateTime.parse(createdAt);
+                final date = DateTime.parse(timestamp);
                 final diff = DateTime.now().difference(date);
                 if (diff.inMinutes < 60) {
                   timeStr = '${diff.inMinutes} mins ago';
@@ -329,17 +375,21 @@ class _ActivityList extends StatelessWidget {
               } catch (_) {}
             }
 
+            final title = '$adminName updated $userName to $planStr ($sourceStr)';
+            final subtitle = reason.isNotEmpty ? '$timeStr • "$reason"' : timeStr;
+
             return ListTile(
               contentPadding: EdgeInsets.zero,
               leading: CircleAvatar(
-                backgroundColor: Theme.of(context).primaryColor.withOpacity(0.2),
-                child: Text(
-                  name.isNotEmpty ? name[0].toUpperCase() : 'F',
-                  style: TextStyle(color: Theme.of(context).primaryColor, fontSize: 12),
+                backgroundColor: Theme.of(context).primaryColor.withOpacity(0.15),
+                child: Icon(
+                  Icons.admin_panel_settings_outlined,
+                  color: Theme.of(context).primaryColor,
+                  size: 18,
                 ),
               ),
-              title: Text('$name joined Kangrow', style: Theme.of(context).textTheme.bodyLarge),
-              subtitle: Text(timeStr),
+              title: Text(title, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 13)),
+              subtitle: Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
             );
           },
         );

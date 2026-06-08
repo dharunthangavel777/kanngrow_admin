@@ -129,7 +129,7 @@ class IdeasScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF111827),
+        backgroundColor: const Color(0xFF111111),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(idea['name'] as String? ?? 'Product Idea', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         content: SizedBox(

@@ -141,6 +141,372 @@ class _UsersScreenState extends State<UsersScreen> {
     }
   }
 
+  Future<void> _showAssignPlanDialog(String id, String name) async {
+    String selectedTier = 'free';
+    String assignmentType = 'lifetime'; // 'lifetime', 'trial_7', 'trial_14', 'trial_30', 'custom'
+    String sourceType = 'admin_assignment';
+    final notesController = TextEditingController();
+    DateTime? customExpiryDate;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Assign Subscription: $name'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  value: selectedTier,
+                  decoration: const InputDecoration(labelText: 'Plan Tier'),
+                  items: const [
+                    DropdownMenuItem(value: 'free', child: Text('Free')),
+                    DropdownMenuItem(value: 'standard', child: Text('Standard')),
+                    DropdownMenuItem(value: 'premium', child: Text('Premium')),
+                    DropdownMenuItem(value: 'enterprise', child: Text('Enterprise')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setDialogState(() => selectedTier = val);
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: assignmentType,
+                  decoration: const InputDecoration(labelText: 'Assignment Type'),
+                  items: const [
+                    DropdownMenuItem(value: 'lifetime', child: Text('Lifetime Assignment')),
+                    DropdownMenuItem(value: 'trial_7', child: Text('7-Day Trial')),
+                    DropdownMenuItem(value: 'trial_14', child: Text('14-Day Trial')),
+                    DropdownMenuItem(value: 'trial_30', child: Text('30-Day Trial')),
+                    DropdownMenuItem(value: 'custom', child: Text('Custom Expiry (Direct)')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setDialogState(() => assignmentType = val);
+                    }
+                  },
+                ),
+                if (assignmentType == 'custom') ...[
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          customExpiryDate == null
+                              ? 'Select Expiry Date'
+                              : 'Expires: ${customExpiryDate!.toLocal().toString().split(' ')[0]}',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      TextButton.icon(
+                        icon: const Icon(Icons.calendar_today),
+                        label: const Text('Pick'),
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: DateTime.now().add(const Duration(days: 1)),
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime.now().add(const Duration(days: 3650)),
+                          );
+                          if (picked != null) {
+                            setDialogState(() => customExpiryDate = picked);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: sourceType,
+                  decoration: const InputDecoration(labelText: 'Source Type'),
+                  items: const [
+                    DropdownMenuItem(value: 'admin_assignment', child: Text('Admin Assignment')),
+                    DropdownMenuItem(value: 'payment', child: Text('Payment')),
+                    DropdownMenuItem(value: 'promo', child: Text('Promotional')),
+                    DropdownMenuItem(value: 'trial', child: Text('Trial')),
+                    DropdownMenuItem(value: 'referral_reward', child: Text('Referral Reward')),
+                    DropdownMenuItem(value: 'enterprise_contract', child: Text('Enterprise Contract')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setDialogState(() => sourceType = val);
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: notesController,
+                  decoration: const InputDecoration(
+                    labelText: 'Notes / Reason',
+                    hintText: 'e.g. Beta testing, partner promotion',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                notesController.dispose();
+                Navigator.pop(context);
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (assignmentType == 'custom' && customExpiryDate == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please select an expiry date for custom assignment'), backgroundColor: Colors.red),
+                  );
+                  return;
+                }
+
+                // Resolve Expiry Date
+                String? expiryStr;
+                bool isLifetime = false;
+
+                if (assignmentType == 'lifetime') {
+                  isLifetime = true;
+                } else if (assignmentType == 'trial_7') {
+                  expiryStr = DateTime.now().add(const Duration(days: 7)).toIso8601String();
+                } else if (assignmentType == 'trial_14') {
+                  expiryStr = DateTime.now().add(const Duration(days: 14)).toIso8601String();
+                } else if (assignmentType == 'trial_30') {
+                  expiryStr = DateTime.now().add(const Duration(days: 30)).toIso8601String();
+                } else if (assignmentType == 'custom') {
+                  expiryStr = DateTime(
+                    customExpiryDate!.year,
+                    customExpiryDate!.month,
+                    customExpiryDate!.day,
+                    23,
+                    59,
+                    59,
+                  ).toIso8601String();
+                }
+
+                final notes = notesController.text.trim();
+                Navigator.pop(context);
+
+                try {
+                  await UsersService.assignUserPlan(
+                    id,
+                    tier: selectedTier,
+                    sourceType: sourceType,
+                    isLifetime: isLifetime,
+                    expiryDate: expiryStr,
+                    notes: notes.isNotEmpty ? notes : null,
+                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Assigned plan $selectedTier to $name'), backgroundColor: Colors.green),
+                    );
+                    _loadUsers();
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed to assign plan: $e'), backgroundColor: Colors.red),
+                    );
+                  }
+                } finally {
+                  notesController.dispose();
+                }
+              },
+              child: const Text('Assign'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showOverrideLimitsDialog(String id, String name) async {
+    final dailyController = TextEditingController();
+    final tokenController = TextEditingController();
+    final reasonController = TextEditingController();
+    bool chat = false;
+    bool competitorResearch = false;
+    bool seo = false;
+    bool trends = false;
+    bool marketing = false;
+    bool contentGen = false;
+    bool customKb = false;
+    bool apiAccess = false;
+    bool whiteLabel = false;
+
+    try {
+      final snap = await FirebaseFirestore.instance.collection('user_overrides').doc(id).get();
+      if (snap.exists && snap.data() != null) {
+        final data = snap.data()!;
+        final limits = data['limitOverrides'] as Map<String, dynamic>?;
+        final features = data['featuresEnabled'] as Map<String, dynamic>?;
+        if (limits != null) {
+          dailyController.text = (limits['dailyRequests'] ?? '').toString();
+          tokenController.text = (limits['monthlyTokens'] ?? '').toString();
+        }
+        if (features != null) {
+          chat = features['chat'] ?? false;
+          competitorResearch = features['competitorResearch'] ?? false;
+          seo = features['seoOptimizations'] ?? false;
+          trends = features['trendAnalysis'] ?? false;
+          marketing = features['marketingStrategy'] ?? false;
+          contentGen = features['contentGenerationSuite'] ?? false;
+          customKb = features['customKnowledgeBase'] ?? false;
+          apiAccess = features['apiAccess'] ?? false;
+          whiteLabel = features['whiteLabel'] ?? false;
+        }
+        reasonController.text = data['reason'] ?? '';
+      }
+    } catch (e) {
+      debugPrint('Failed to load overrides: $e');
+    }
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Override AI Limits: $name'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: dailyController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Daily Requests Limit Override'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: tokenController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Monthly Tokens Limit Override'),
+                ),
+                const SizedBox(height: 16),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Feature Overrides', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+                SwitchListTile(
+                  title: const Text('Unlimited AI Chats'),
+                  value: chat,
+                  onChanged: (val) => setDialogState(() => chat = val),
+                ),
+                SwitchListTile(
+                  title: const Text('Competitor Research'),
+                  value: competitorResearch,
+                  onChanged: (val) => setDialogState(() => competitorResearch = val),
+                ),
+                SwitchListTile(
+                  title: const Text('SEO Recommendations'),
+                  value: seo,
+                  onChanged: (val) => setDialogState(() => seo = val),
+                ),
+                SwitchListTile(
+                  title: const Text('Trend Analysis'),
+                  value: trends,
+                  onChanged: (val) => setDialogState(() => trends = val),
+                ),
+                SwitchListTile(
+                  title: const Text('Marketing Strategy'),
+                  value: marketing,
+                  onChanged: (val) => setDialogState(() => marketing = val),
+                ),
+                SwitchListTile(
+                  title: const Text('Content Gen Suite'),
+                  value: contentGen,
+                  onChanged: (val) => setDialogState(() => contentGen = val),
+                ),
+                SwitchListTile(
+                  title: const Text('Custom Knowledge Base'),
+                  value: customKb,
+                  onChanged: (val) => setDialogState(() => customKb = val),
+                ),
+                SwitchListTile(
+                  title: const Text('API Access'),
+                  value: apiAccess,
+                  onChanged: (val) => setDialogState(() => apiAccess = val),
+                ),
+                SwitchListTile(
+                  title: const Text('White Label / Branding'),
+                  value: whiteLabel,
+                  onChanged: (val) => setDialogState(() => whiteLabel = val),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: reasonController,
+                  decoration: const InputDecoration(labelText: 'Reason for Override'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                dailyController.dispose();
+                tokenController.dispose();
+                reasonController.dispose();
+                Navigator.pop(context);
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final daily = int.tryParse(dailyController.text);
+                final tokens = int.tryParse(tokenController.text);
+                final reason = reasonController.text;
+
+                Navigator.pop(context);
+
+                dailyController.dispose();
+                tokenController.dispose();
+                reasonController.dispose();
+
+                try {
+                  await UsersService.overrideUserLimits(
+                    id,
+                    limitOverrides: {
+                      if (daily != null) 'dailyRequests': daily,
+                      if (tokens != null) 'monthlyTokens': tokens,
+                    },
+                    featuresEnabled: {
+                      'chat': chat,
+                      'competitorResearch': competitorResearch,
+                      'seoOptimizations': seo,
+                      'trendAnalysis': trends,
+                      'marketingStrategy': marketing,
+                      'contentGenerationSuite': contentGen,
+                      'customKnowledgeBase': customKb,
+                      'apiAccess': apiAccess,
+                      'whiteLabel': whiteLabel,
+                    },
+                    reason: reason,
+                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Limits overridden for $name'), backgroundColor: Colors.green),
+                    );
+                    _loadUsers();
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed to override limits: $e'), backgroundColor: Colors.red),
+                    );
+                  }
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -209,6 +575,7 @@ class _UsersScreenState extends State<UsersScreen> {
                           Expanded(flex: 2, child: Text('NAME', style: _headerStyle(context))),
                           Expanded(flex: 3, child: Text('EMAIL', style: _headerStyle(context))),
                           Expanded(flex: 2, child: Text('STARTUP PHASE', style: _headerStyle(context))),
+                          Expanded(flex: 2, child: Text('SUBSCRIPTION', style: _headerStyle(context))),
                           Expanded(flex: 2, child: Text('STATUS', style: _headerStyle(context))),
                           const SizedBox(width: 48), // For action menu
                         ],
@@ -227,6 +594,8 @@ class _UsersScreenState extends State<UsersScreen> {
                             onSuspend: () => _suspendUser(user.id, user.name),
                             onRestore: () => _restoreUser(user.id, user.name),
                             onDelete: () => _deleteUser(user.id, user.name),
+                            onAssignPlan: () => _showAssignPlanDialog(user.id, user.name),
+                            onOverrideLimits: () => _showOverrideLimitsDialog(user.id, user.name),
                           );
                         },
                       ),
@@ -254,12 +623,16 @@ class _UserRow extends StatelessWidget {
   final VoidCallback onSuspend;
   final VoidCallback onRestore;
   final VoidCallback onDelete;
+  final VoidCallback onAssignPlan;
+  final VoidCallback onOverrideLimits;
 
   const _UserRow({
     required this.user,
     required this.onSuspend,
     required this.onRestore,
     required this.onDelete,
+    required this.onAssignPlan,
+    required this.onOverrideLimits,
   });
 
   void _showActionDialog(BuildContext context) {
@@ -289,6 +662,22 @@ class _UserRow extends StatelessWidget {
                 },
               ),
             ListTile(
+              leading: const Icon(Icons.card_membership, color: Colors.blue),
+              title: const Text('Assign Plan'),
+              onTap: () {
+                Navigator.pop(context);
+                onAssignPlan();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.speed, color: Colors.purple),
+              title: const Text('Override Limits'),
+              onTap: () {
+                Navigator.pop(context);
+                onOverrideLimits();
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.delete, color: Colors.red),
               title: const Text('Delete User', style: TextStyle(color: Colors.red)),
               onTap: () {
@@ -299,6 +688,80 @@ class _UserRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSubscriptionBadge(String tier, bool isLifetime, String? expiry) {
+    Color badgeColor;
+    switch (tier.toLowerCase()) {
+      case 'standard':
+        badgeColor = Colors.blue;
+        break;
+      case 'premium':
+        badgeColor = Colors.purple;
+        break;
+      case 'enterprise':
+        badgeColor = Colors.green;
+        break;
+      default:
+        badgeColor = Colors.grey;
+    }
+
+    String label = tier.toUpperCase();
+    String subtext = '';
+    
+    if (isLifetime) {
+      subtext = 'Lifetime';
+    } else if (expiry != null && expiry != 'lifetime') {
+      try {
+        final expDate = DateTime.parse(expiry);
+        final diff = expDate.difference(DateTime.now());
+        if (diff.isNegative) {
+          subtext = 'Expired';
+          badgeColor = Colors.red;
+        } else if (diff.inDays <= 14) {
+          subtext = 'Trial (${diff.inDays}d left)';
+        } else {
+          subtext = '${expDate.month}/${expDate.day}/${expDate.year}';
+        }
+      } catch (_) {
+        subtext = 'Active';
+      }
+    } else {
+      subtext = tier.toLowerCase() == 'free' ? 'Basic' : 'Active';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+          decoration: BoxDecoration(
+            color: badgeColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: badgeColor.withOpacity(0.3), width: 1),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: badgeColor,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        if (subtext.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            subtext,
+            style: const TextStyle(
+              color: Colors.grey,
+              fontSize: 10,
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -339,6 +802,23 @@ class _UserRow extends StatelessWidget {
               final data = snapshot.data!.data() as Map<String, dynamic>?;
               final stage = data?['stage'] ?? 'Ideation';
               return Text(stage.toString());
+            },
+          ),
+        ),
+        Expanded(
+          flex: 2,
+          child: StreamBuilder<DocumentSnapshot>(
+            stream: FirebaseFirestore.instance.collection('users').doc(user.id).snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData || !snapshot.data!.exists) {
+                return _buildSubscriptionBadge('free', false, null);
+              }
+              final data = snapshot.data!.data() as Map<String, dynamic>?;
+              final sub = data?['subscription'] as Map<String, dynamic>? ?? {};
+              final tier = sub['tier'] as String? ?? 'free';
+              final isLifetime = sub['isLifetime'] == true;
+              final expiry = sub['currentPeriodEnd'] as String?;
+              return _buildSubscriptionBadge(tier, isLifetime, expiry);
             },
           ),
         ),

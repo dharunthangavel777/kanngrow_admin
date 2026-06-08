@@ -187,7 +187,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             const SizedBox(height: 16),
                             Expanded(
                               child: StreamBuilder<QuerySnapshot>(
-                                stream: FirebaseFirestore.instance.collection('notifications').snapshots(),
+                                stream: FirebaseFirestore.instance
+                                    .collection('notifications')
+                                    .where('type', isEqualTo: 'broadcast')
+                                    .snapshots(),
                                 builder: (context, snapshot) {
                                   if (snapshot.connectionState == ConnectionState.waiting) {
                                     return const Center(child: CircularProgressIndicator());
@@ -200,7 +203,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
                                   final docs = snapshot.data!.docs.map((doc) {
                                     return doc.data() as Map<String, dynamic>;
-                                  }).where((d) => d['type'] == 'broadcast').toList();
+                                  }).toList();
 
                                   // Sort by sentAt descending
                                   docs.sort((a, b) {

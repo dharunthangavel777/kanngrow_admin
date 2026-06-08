@@ -43,14 +43,25 @@ class _Sidebar extends StatelessWidget {
         children: [
           Container(
             padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
-            child: Text(
-              'KANGROW ADMIN',
-              style: TextStyle(
-                color: Theme.of(context).primaryColor,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5,
-              ),
+            child: Row(
+              children: [
+                Image.asset(
+                  'assets/logos/logo_without_text.png',
+                  height: 24,
+                  width: 24,
+                  fit: BoxFit.contain,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'KANGROW ADMIN',
+                  style: TextStyle(
+                    color: Theme.of(context).primaryColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ],
             ),
           ),
           

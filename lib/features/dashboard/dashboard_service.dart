@@ -9,6 +9,14 @@ class DashboardStats {
   final int vendorsCount;
   final int schemesCount;
   final int reportsCount;
+  final int freeUsers;
+  final int standardUsers;
+  final int premiumUsers;
+  final int enterpriseUsers;
+  final int paidSubscribers;
+  final int adminAssignedSubscribers;
+  final int trialSubscribers;
+  final int lifetimeSubscribers;
 
   DashboardStats({
     required this.totalUsers,
@@ -17,6 +25,14 @@ class DashboardStats {
     required this.vendorsCount,
     required this.schemesCount,
     required this.reportsCount,
+    required this.freeUsers,
+    required this.standardUsers,
+    required this.premiumUsers,
+    required this.enterpriseUsers,
+    required this.paidSubscribers,
+    required this.adminAssignedSubscribers,
+    required this.trialSubscribers,
+    required this.lifetimeSubscribers,
   });
 
   factory DashboardStats.fromJson(Map<String, dynamic> json) {
@@ -29,6 +45,14 @@ class DashboardStats {
       vendorsCount: kb['vendors'] as int? ?? 0,
       schemesCount: kb['govtSchemes'] as int? ?? 0,
       reportsCount: kb['marketReports'] as int? ?? 0,
+      freeUsers: data['freeUsers'] as int? ?? 0,
+      standardUsers: data['standardUsers'] as int? ?? 0,
+      premiumUsers: data['premiumUsers'] as int? ?? 0,
+      enterpriseUsers: data['enterpriseUsers'] as int? ?? 0,
+      paidSubscribers: data['paidSubscribers'] as int? ?? 0,
+      adminAssignedSubscribers: data['adminAssignedSubscribers'] as int? ?? 0,
+      trialSubscribers: data['trialSubscribers'] as int? ?? 0,
+      lifetimeSubscribers: data['lifetimeSubscribers'] as int? ?? 0,
     );
   }
 }

@@ -70,13 +70,10 @@ class _AuthScreenState extends State<AuthScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // Logo or Icon
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).primaryColor.withOpacity(0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(Icons.admin_panel_settings, size: 48, color: Theme.of(context).primaryColor),
+                      Image.asset(
+                        'assets/logos/logo_with_text.png',
+                        height: 64,
+                        fit: BoxFit.contain,
                       ),
                       const SizedBox(height: 32),
                       Text(

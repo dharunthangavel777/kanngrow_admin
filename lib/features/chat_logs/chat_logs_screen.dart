@@ -222,6 +222,20 @@ class _ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    String cleanText = text;
+    if (isAi && cleanText.isNotEmpty) {
+      // Strip action chips [Action: ...]
+      cleanText = cleanText.replaceAll(RegExp(r'^\[Action:\s*(.*?)\]$', multiLine: true), '').trim();
+      // Formatting expandable markers +++ into readable headers
+      cleanText = cleanText.replaceAllMapped(
+        RegExp(r'^\+\+\+\s*(.*?)$', multiLine: true),
+        (match) {
+          final title = match.group(1)?.trim() ?? '';
+          return title.isNotEmpty ? '\n─── $title ───\n' : '\n';
+        },
+      ).trim();
+    }
+
     return Align(
       alignment: isAi ? Alignment.centerLeft : Alignment.centerRight,
       child: Container(
@@ -236,7 +250,7 @@ class _ChatBubble extends StatelessWidget {
           border: isAi ? Border.all(color: Theme.of(context).dividerColor) : null,
         ),
         child: Text(
-          text,
+          cleanText,
           style: TextStyle(
             color: isAi ? Theme.of(context).textTheme.bodyLarge?.color : Colors.white,
           ),

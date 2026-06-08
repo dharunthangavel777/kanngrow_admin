@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 
 class AdminTheme {
   // Premium Dark Theme Palette
-  static const Color scaffoldBackground = Color(0xFF0F1115);
-  static const Color surfaceColor = Color(0xFF16191F);
-  static const Color surfaceHighlight = Color(0xFF22262F);
-  static const Color primaryBlue = Color(0xFF3B82F6);
-  static const Color accentPurple = Color(0xFF8B5CF6);
-  static const Color textPrimary = Color(0xFFF9FAFB);
-  static const Color textSecondary = Color(0xFF9CA3AF);
-  static const Color borderSubtle = Color(0xFF2A2D35);
+  static const Color scaffoldBackground = Color(0xFF0A0A0A);
+  static const Color surfaceColor = Color(0xFF111111);
+  static const Color surfaceHighlight = Color(0xFF1F2937);
+  static const Color primaryBlue = Color(0xFF2ED9E5);
+  static const Color accentPurple = Color(0xFF18AEB9);
+  static const Color textPrimary = Color(0xFFFFFFFF);
+  static const Color textSecondary = Color(0xFFBDBDBD);
+  static const Color borderSubtle = Color(0xFF222222);
   
   static const Color successGreen = Color(0xFF10B981);
   static const Color warningOrange = Color(0xFFF59E0B);

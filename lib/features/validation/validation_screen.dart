@@ -138,7 +138,7 @@ class _ValidationRow extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF111827),
+        backgroundColor: const Color(0xFF111111),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(ideaName, style: const TextStyle(color: Colors.white)),
         content: SingleChildScrollView(
