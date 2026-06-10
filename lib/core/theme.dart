@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AdminTheme {
   // Premium Dark Theme Palette
@@ -30,13 +31,13 @@ class AdminTheme {
         onSecondary: Colors.white,
         onSurface: textPrimary,
       ),
-      textTheme: const TextTheme(
+      textTheme: GoogleFonts.poppinsTextTheme(const TextTheme(
         displayLarge: TextStyle(color: textPrimary, fontSize: 32, fontWeight: FontWeight.bold),
         titleLarge: TextStyle(color: textPrimary, fontSize: 24, fontWeight: FontWeight.w600),
         titleMedium: TextStyle(color: textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
         bodyLarge: TextStyle(color: textPrimary, fontSize: 16),
         bodyMedium: TextStyle(color: textSecondary, fontSize: 14),
-      ),
+      )),
       cardTheme: CardThemeData(
         color: surfaceColor,
         elevation: 0,
@@ -57,12 +58,12 @@ class AdminTheme {
         selectedLabelTextStyle: TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
         unselectedLabelTextStyle: TextStyle(color: textSecondary),
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: surfaceColor,
         elevation: 0,
         centerTitle: false,
         iconTheme: IconThemeData(color: textPrimary),
-        titleTextStyle: TextStyle(color: textPrimary, fontSize: 20, fontWeight: FontWeight.bold),
+        titleTextStyle: GoogleFonts.poppins(color: textPrimary, fontSize: 20, fontWeight: FontWeight.bold),
       ),
       iconTheme: const IconThemeData(color: textSecondary),
     );

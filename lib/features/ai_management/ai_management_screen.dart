@@ -23,10 +23,18 @@ class _AiManagementScreenState extends State<AiManagementScreen> {
   bool _tierDown = false;
   bool _savingSettings = false;
 
+  // Raw AI logs state
+  List<AiLogItem> _logs = [];
+  bool _loadingLogs = false;
+  bool _hasMoreLogs = false;
+  String? _logsError;
+  String? _lastLogId;
+
   @override
   void initState() {
     super.initState();
     _loadData();
+    _loadLogs(reset: true);
   }
 
   void _loadData() async {
@@ -48,6 +56,39 @@ class _AiManagementScreenState extends State<AiManagementScreen> {
         _error = e.toString();
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _loadLogs({bool reset = false}) async {
+    if (_loadingLogs) return;
+    setState(() {
+      _loadingLogs = true;
+      _logsError = null;
+      if (reset) {
+        _logs = [];
+        _lastLogId = null;
+        _hasMoreLogs = false;
+      }
+    });
+    try {
+      final response = await _service.getRawAILogs(limit: 50, startAfter: _lastLogId);
+      if (mounted) {
+        setState(() {
+          _logs.addAll(response.logs);
+          _hasMoreLogs = response.hasMore;
+          if (_logs.isNotEmpty) {
+            _lastLogId = _logs.last.id;
+          }
+          _loadingLogs = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _logsError = e.toString();
+          _loadingLogs = false;
+        });
+      }
     }
   }
 
@@ -136,35 +177,54 @@ class _AiManagementScreenState extends State<AiManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('OpenAI Cost Center'),
-        actions: [
-          Row(
-            children: [
-              _buildPeriodChip(7, '7 Days'),
-              const SizedBox(width: 8),
-              _buildPeriodChip(14, '14 Days'),
-              const SizedBox(width: 8),
-              _buildPeriodChip(30, '30 Days'),
-              const SizedBox(width: 8),
-              _buildPeriodChip(90, '90 Days'),
-              const SizedBox(width: 16),
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('OpenAI Cost Center'),
+          actions: [
+            Row(
+              children: [
+                _buildPeriodChip(7, '7 Days'),
+                const SizedBox(width: 8),
+                _buildPeriodChip(14, '14 Days'),
+                const SizedBox(width: 8),
+                _buildPeriodChip(30, '30 Days'),
+                const SizedBox(width: 8),
+                _buildPeriodChip(90, '90 Days'),
+                const SizedBox(width: 16),
+              ],
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loading ? null : () {
+                _loadData();
+                _loadLogs(reset: true);
+              },
+              tooltip: 'Refresh Stats',
+            ),
+            const SizedBox(width: 16),
+          ],
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'COST CENTER'),
+              Tab(text: 'RAW AI LOGS'),
+              Tab(text: 'OPTIMIZATION CONTROLS'),
             ],
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loading ? null : _loadData,
-            tooltip: 'Refresh Stats',
-          ),
-          const SizedBox(width: 16),
-        ],
+        ),
+        body: _loading
+            ? _buildLoadingWidget()
+            : _error != null
+                ? _buildErrorWidget()
+                : TabBarView(
+                    children: [
+                      _buildMainDashboard(),
+                      _buildRawAiLogsTab(),
+                      _buildOptimizationControlsTab(),
+                    ],
+                  ),
       ),
-      body: _loading
-          ? _buildLoadingWidget()
-          : _error != null
-              ? _buildErrorWidget()
-              : _buildMainDashboard(),
     );
   }
 
@@ -252,8 +312,6 @@ class _AiManagementScreenState extends State<AiManagementScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildPlatformControlsCard(),
-                          const SizedBox(height: 24),
                           _buildModelDistributionCard(),
                           const SizedBox(height: 24),
                           _buildTopUsersCard(),
@@ -266,8 +324,6 @@ class _AiManagementScreenState extends State<AiManagementScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildPlatformControlsCard(),
-                    const SizedBox(height: 24),
                     _buildChartCard(),
                     const SizedBox(height: 24),
                     _buildFeatureBreakdownCard(),
@@ -291,12 +347,12 @@ class _AiManagementScreenState extends State<AiManagementScreen> {
     return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: MediaQuery.of(context).size.width > 1200
-          ? 4
-          : (MediaQuery.of(context).size.width > 600 ? 2 : 1),
+      crossAxisCount: MediaQuery.of(context).size.width > 1400
+          ? 6
+          : (MediaQuery.of(context).size.width > 900 ? 3 : 2),
       crossAxisSpacing: 16,
       mainAxisSpacing: 16,
-      childAspectRatio: MediaQuery.of(context).size.width > 600 ? 1.8 : 2.5,
+      childAspectRatio: MediaQuery.of(context).size.width > 900 ? 1.8 : 2.5,
       children: [
         _buildSummaryCard(
           'Total Cost (Est)',
@@ -315,6 +371,18 @@ class _AiManagementScreenState extends State<AiManagementScreen> {
           _formatNumber(summary.totalCalls),
           Icons.api_outlined,
           AdminTheme.accentPurple,
+        ),
+        _buildSummaryCard(
+          'Failed Calls',
+          _formatNumber(summary.failedCalls),
+          Icons.error_outline,
+          AdminTheme.errorRed,
+        ),
+        _buildSummaryCard(
+          'Failure Rate',
+          '${summary.failureRate.toStringAsFixed(1)}%',
+          Icons.warning_amber_outlined,
+          AdminTheme.warningOrange,
         ),
         _buildSummaryCard(
           'Avg Tokens / Call',
@@ -1074,6 +1142,323 @@ class _AiManagementScreenState extends State<AiManagementScreen> {
       default:
         return Icons.code;
     }
+  }
+
+  Widget _buildOptimizationControlsTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24.0),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: _buildPlatformControlsCard(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRawAiLogsTab() {
+    return RefreshIndicator(
+      onRefresh: () => _loadLogs(reset: true),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Recent AI Request Logs',
+                  style: TextStyle(
+                    color: AdminTheme.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () => _loadLogs(reset: true),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Refresh'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AdminTheme.surfaceHighlight,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: _logs.isEmpty && _loadingLogs
+                  ? const Center(child: CircularProgressIndicator())
+                  : _logsError != null
+                      ? Center(child: Text('Error loading logs: $_logsError', style: const TextStyle(color: AdminTheme.errorRed)))
+                      : _logs.isEmpty
+                          ? const Center(child: Text('No logs found.'))
+                          : _buildLogsTableOrList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLogDetailsDialog(AiLogItem log) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(
+                log.status == 'failed' ? Icons.error_outline : Icons.check_circle_outline,
+                color: log.status == 'failed' ? AdminTheme.errorRed : AdminTheme.successGreen,
+              ),
+              const SizedBox(width: 8),
+              Text('Log Details: ${log.id.length > 8 ? log.id.substring(0, 8) : log.id}...'),
+            ],
+          ),
+          content: SizedBox(
+            width: 600,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildDetailRow('ID', log.id),
+                  _buildDetailRow('Timestamp', log.createdAt),
+                  _buildDetailRow('User UID', log.uid),
+                  _buildDetailRow('Feature', log.feature),
+                  _buildDetailRow('Model', log.model),
+                  _buildDetailRow('Latency', '${log.latencyMs} ms'),
+                  _buildDetailRow('Cost', _formatCost(log.cost)),
+                  _buildDetailRow('Prompt Tokens', _formatNumber(log.promptTokens)),
+                  _buildDetailRow('Completion Tokens', _formatNumber(log.completionTokens)),
+                  _buildDetailRow('Total Tokens', _formatNumber(log.totalTokens)),
+                  _buildDetailRow('Status', log.status.toUpperCase(), 
+                    color: log.status == 'failed' ? AdminTheme.errorRed : AdminTheme.successGreen),
+                  if (log.status == 'failed') ...[
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Error Message:',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: AdminTheme.errorRed),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AdminTheme.errorRed.withOpacity(0.3)),
+                      ),
+                      child: SelectableText(
+                        log.error.isNotEmpty ? log.error : 'Unknown OpenAI call failure',
+                        style: const TextStyle(
+                          fontFamily: 'Courier',
+                          fontSize: 13,
+                          color: AdminTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value, {Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(
+              label,
+              style: const TextStyle(color: AdminTheme.textSecondary, fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
+          Expanded(
+            child: SelectableText(
+              value,
+              style: TextStyle(
+                color: color ?? AdminTheme.textPrimary,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLogsTableOrList() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth > 900) {
+          return Column(
+            children: [
+              Expanded(
+                child: Scrollbar(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.vertical,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        showCheckboxColumn: false,
+                        columns: const [
+                          DataColumn(label: Text('Status')),
+                          DataColumn(label: Text('Created At')),
+                          DataColumn(label: Text('Feature')),
+                          DataColumn(label: Text('Model')),
+                          DataColumn(label: Text('Latency')),
+                          DataColumn(label: Text('Cost')),
+                          DataColumn(label: Text('Tokens (P/C/T)')),
+                          DataColumn(label: Text('Actions')),
+                        ],
+                        rows: _logs.map((log) {
+                          final isFailed = log.status == 'failed';
+                          return DataRow(
+                            onSelectChanged: (_) => _showLogDetailsDialog(log),
+                            cells: [
+                              DataCell(
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: (isFailed ? AdminTheme.errorRed : AdminTheme.successGreen).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: (isFailed ? AdminTheme.errorRed : AdminTheme.successGreen).withOpacity(0.3),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    log.status.toUpperCase(),
+                                    style: TextStyle(
+                                      color: isFailed ? AdminTheme.errorRed : AdminTheme.successGreen,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              DataCell(Text(log.createdAt.isNotEmpty ? log.createdAt.substring(0, 19).replaceAll('T', ' ') : 'N/A')),
+                              DataCell(Text(log.feature)),
+                              DataCell(Text(log.model)),
+                              DataCell(Text('${log.latencyMs} ms')),
+                              DataCell(Text(_formatCost(log.cost))),
+                              DataCell(Text('${log.totalTokens} (${log.promptTokens}/${log.completionTokens})')),
+                              DataCell(
+                                IconButton(
+                                  icon: const Icon(Icons.visibility_outlined, size: 20),
+                                  onPressed: () => _showLogDetailsDialog(log),
+                                  tooltip: 'View Details',
+                                ),
+                              ),
+                            ],
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (_hasMoreLogs || _loadingLogs) _buildLoadMoreButton(),
+            ],
+          );
+        } else {
+          return Column(
+            children: [
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _logs.length,
+                  itemBuilder: (context, index) {
+                    final log = _logs[index];
+                    final isFailed = log.status == 'failed';
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: ListTile(
+                        onTap: () => _showLogDetailsDialog(log),
+                        title: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: (isFailed ? AdminTheme.errorRed : AdminTheme.successGreen).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                log.status.toUpperCase(),
+                                style: TextStyle(
+                                  color: isFailed ? AdminTheme.errorRed : AdminTheme.successGreen,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '${log.feature} • ${log.model}',
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Cost: ${_formatCost(log.cost)} | Latency: ${log.latencyMs} ms'),
+                              const SizedBox(height: 2),
+                              Text('Tokens: ${log.totalTokens} (P: ${log.promptTokens} / C: ${log.completionTokens})'),
+                              const SizedBox(height: 2),
+                              Text('Time: ${log.createdAt.isNotEmpty ? log.createdAt.substring(0, 19).replaceAll('T', ' ') : 'N/A'}',
+                                  style: const TextStyle(fontSize: 12, color: AdminTheme.textSecondary)),
+                            ],
+                          ),
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              if (_hasMoreLogs || _loadingLogs) _buildLoadMoreButton(),
+            ],
+          );
+        }
+      },
+    );
+  }
+
+  Widget _buildLoadMoreButton() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16.0),
+      child: Center(
+        child: _loadingLogs
+            ? const CircularProgressIndicator()
+            : ElevatedButton(
+                onPressed: () => _loadLogs(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AdminTheme.primaryBlue,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Load More Logs'),
+              ),
+      ),
+    );
   }
 }
 

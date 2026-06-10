@@ -11,6 +11,8 @@ class AiUsageSummary {
   final double avgCostPerCall;
   final int avgTokensPerCall;
   final int periodDays;
+  final int failedCalls;
+  final double failureRate;
 
   const AiUsageSummary({
     required this.totalCost,
@@ -19,6 +21,8 @@ class AiUsageSummary {
     required this.avgCostPerCall,
     required this.avgTokensPerCall,
     required this.periodDays,
+    required this.failedCalls,
+    required this.failureRate,
   });
 
   factory AiUsageSummary.fromJson(Map<String, dynamic> j) => AiUsageSummary(
@@ -28,6 +32,8 @@ class AiUsageSummary {
         avgCostPerCall: (j['avgCostPerCall'] as num).toDouble(),
         avgTokensPerCall: (j['avgTokensPerCall'] as num).toInt(),
         periodDays: (j['periodDays'] as num).toInt(),
+        failedCalls: (j['failedCalls'] as num?)?.toInt() ?? 0,
+        failureRate: (j['failureRate'] as num?)?.toDouble() ?? 0.0,
       );
 }
 
@@ -160,6 +166,60 @@ class AiUsageReport {
       );
 }
 
+class AiLogItem {
+  final String id;
+  final String uid;
+  final String feature;
+  final String model;
+  final int promptTokens;
+  final int completionTokens;
+  final int totalTokens;
+  final double cost;
+  final String status;
+  final String error;
+  final int latencyMs;
+  final String createdAt;
+
+  AiLogItem({
+    required this.id,
+    required this.uid,
+    required this.feature,
+    required this.model,
+    required this.promptTokens,
+    required this.completionTokens,
+    required this.totalTokens,
+    required this.cost,
+    required this.status,
+    required this.error,
+    required this.latencyMs,
+    required this.createdAt,
+  });
+
+  factory AiLogItem.fromJson(Map<String, dynamic> json) {
+    return AiLogItem(
+      id: json['id'] as String? ?? '',
+      uid: json['uid'] as String? ?? '',
+      feature: json['feature'] as String? ?? '',
+      model: json['model'] as String? ?? '',
+      promptTokens: (json['promptTokens'] as num?)?.toInt() ?? 0,
+      completionTokens: (json['completionTokens'] as num?)?.toInt() ?? 0,
+      totalTokens: (json['totalTokens'] as num?)?.toInt() ?? 0,
+      cost: (json['cost'] as num?)?.toDouble() ?? 0.0,
+      status: json['status'] as String? ?? 'success',
+      error: json['error'] as String? ?? '',
+      latencyMs: (json['latencyMs'] as num?)?.toInt() ?? 0,
+      createdAt: json['createdAt'] as String? ?? '',
+    );
+  }
+}
+
+class AiLogResponse {
+  final List<AiLogItem> logs;
+  final bool hasMore;
+
+  AiLogResponse({required this.logs, required this.hasMore});
+}
+
 // ── Service ──────────────────────────────────────────────────────────────────
 
 class AiManagementService {
@@ -209,5 +269,24 @@ class AiManagementService {
     if (response.statusCode != 200) {
       throw Exception('Failed to update settings: ${response.statusCode}');
     }
+  }
+
+  Future<AiLogResponse> getRawAILogs({int limit = 50, String? startAfter}) async {
+    final headers = await _headers();
+    var url = '$_baseUrl/admin/ai-logs?limit=$limit';
+    if (startAfter != null && startAfter.isNotEmpty) {
+      url += '&startAfter=$startAfter';
+    }
+    final uri = Uri.parse(url);
+    final response = await http.get(uri, headers: headers);
+
+    if (response.statusCode == 200) {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final list = body['data'] as List<dynamic>? ?? [];
+      final logs = list.map((e) => AiLogItem.fromJson(e as Map<String, dynamic>)).toList();
+      final hasMore = body['hasMore'] as bool? ?? false;
+      return AiLogResponse(logs: logs, hasMore: hasMore);
+    }
+    throw Exception('Failed to load AI raw logs: ${response.statusCode}');
   }
 }
