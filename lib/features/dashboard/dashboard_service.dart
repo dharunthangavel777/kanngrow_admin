@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../services/token_service.dart';
+import '../../core/admin_network_config.dart';
 
 class DashboardStats {
   final int totalUsers;
@@ -17,6 +18,8 @@ class DashboardStats {
   final int adminAssignedSubscribers;
   final int trialSubscribers;
   final int lifetimeSubscribers;
+  final double mrr;
+  final double totalRevenueInr;
 
   DashboardStats({
     required this.totalUsers,
@@ -33,10 +36,12 @@ class DashboardStats {
     required this.adminAssignedSubscribers,
     required this.trialSubscribers,
     required this.lifetimeSubscribers,
+    this.mrr = 0.0,
+    this.totalRevenueInr = 0.0,
   });
 
   factory DashboardStats.fromJson(Map<String, dynamic> json) {
-    final data = json['data'] as Map<String, dynamic>;
+    final data = json['data'] as Map<String, dynamic>? ?? {};
     final kb = data['knowledgeBase'] as Map<String, dynamic>? ?? {};
     return DashboardStats(
       totalUsers: data['totalUsers'] as int? ?? 0,
@@ -53,16 +58,13 @@ class DashboardStats {
       adminAssignedSubscribers: data['adminAssignedSubscribers'] as int? ?? 0,
       trialSubscribers: data['trialSubscribers'] as int? ?? 0,
       lifetimeSubscribers: data['lifetimeSubscribers'] as int? ?? 0,
+      mrr: (data['mrr'] as num?)?.toDouble() ?? 0.0,
+      totalRevenueInr: (data['totalRevenueInr'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }
 
 class DashboardService {
-  static const String _baseUrl = String.fromEnvironment(
-    'BACKEND_URL',
-    defaultValue: 'https://kanngrowbackend-production.up.railway.app/api/v1',
-  );
-
   static Future<Map<String, String>> _headers() async {
     final token = await TokenService.getToken();
     return {
@@ -73,7 +75,7 @@ class DashboardService {
 
   static Future<DashboardStats> getStats() async {
     final response = await http.get(
-      Uri.parse('$_baseUrl/admin/dashboard'),
+      Uri.parse('${AdminNetworkConfig.baseUrl}/admin/dashboard'),
       headers: await _headers(),
     );
 

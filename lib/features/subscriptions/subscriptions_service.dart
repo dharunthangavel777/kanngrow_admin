@@ -1,34 +1,51 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../services/token_service.dart';
+import '../../core/admin_network_config.dart';
 
 class PlanPricing {
   final double monthlyUsd;
   final double annualUsd;
+  final double monthlyInr;
+  final double annualInr;
   final String stripePriceIdMonthly;
   final String stripePriceIdAnnual;
+  final String razorpayPlanIdMonthly;
+  final String razorpayPlanIdAnnual;
 
   PlanPricing({
     required this.monthlyUsd,
     required this.annualUsd,
+    required this.monthlyInr,
+    required this.annualInr,
     required this.stripePriceIdMonthly,
     required this.stripePriceIdAnnual,
+    required this.razorpayPlanIdMonthly,
+    required this.razorpayPlanIdAnnual,
   });
 
   factory PlanPricing.fromJson(Map<String, dynamic> json) {
     return PlanPricing(
       monthlyUsd: (json['monthlyUsd'] as num?)?.toDouble() ?? 0.0,
       annualUsd: (json['annualUsd'] as num?)?.toDouble() ?? 0.0,
+      monthlyInr: (json['monthlyInr'] as num?)?.toDouble() ?? ((json['monthlyUsd'] as num?)?.toDouble() ?? 0.0) * 85,
+      annualInr: (json['annualInr'] as num?)?.toDouble() ?? ((json['annualUsd'] as num?)?.toDouble() ?? 0.0) * 85,
       stripePriceIdMonthly: json['stripePriceIdMonthly'] as String? ?? '',
       stripePriceIdAnnual: json['stripePriceIdAnnual'] as String? ?? '',
+      razorpayPlanIdMonthly: json['razorpayPlanIdMonthly'] as String? ?? '',
+      razorpayPlanIdAnnual: json['razorpayPlanIdAnnual'] as String? ?? '',
     );
   }
 
   Map<String, dynamic> toJson() => {
         'monthlyUsd': monthlyUsd,
         'annualUsd': annualUsd,
+        'monthlyInr': monthlyInr,
+        'annualInr': annualInr,
         'stripePriceIdMonthly': stripePriceIdMonthly,
         'stripePriceIdAnnual': stripePriceIdAnnual,
+        'razorpayPlanIdMonthly': razorpayPlanIdMonthly,
+        'razorpayPlanIdAnnual': razorpayPlanIdAnnual,
       };
 }
 
@@ -155,11 +172,64 @@ class SubscriptionPlan {
   }
 }
 
+class AdminPaymentTransaction {
+  final String id;
+  final String orderId;
+  final String paymentId;
+  final String uid;
+  final String userEmail;
+  final String userName;
+  final String tier;
+  final String planName;
+  final String billingCycle;
+  final double amount;
+  final String currency;
+  final String status;
+  final String gateway;
+  final String mode;
+  final String createdAt;
+
+  AdminPaymentTransaction({
+    required this.id,
+    required this.orderId,
+    required this.paymentId,
+    required this.uid,
+    required this.userEmail,
+    required this.userName,
+    required this.tier,
+    required this.planName,
+    required this.billingCycle,
+    required this.amount,
+    required this.currency,
+    required this.status,
+    required this.gateway,
+    required this.mode,
+    required this.createdAt,
+  });
+
+  factory AdminPaymentTransaction.fromJson(Map<String, dynamic> json) {
+    return AdminPaymentTransaction(
+      id: json['id'] as String? ?? '',
+      orderId: json['orderId'] as String? ?? '',
+      paymentId: json['paymentId'] as String? ?? '',
+      uid: json['uid'] as String? ?? '',
+      userEmail: json['userEmail'] as String? ?? '',
+      userName: json['userName'] as String? ?? 'Valued Seller',
+      tier: json['tier'] as String? ?? 'standard',
+      planName: json['planName'] as String? ?? 'Standard Plan',
+      billingCycle: json['billingCycle'] as String? ?? 'monthly',
+      amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
+      currency: json['currency'] as String? ?? 'INR',
+      status: json['status'] as String? ?? 'captured',
+      gateway: json['gateway'] as String? ?? 'razorpay',
+      mode: json['mode'] as String? ?? 'test',
+      createdAt: json['createdAt'] as String? ?? '',
+    );
+  }
+}
+
 class SubscriptionsService {
-  static const String _baseUrl = String.fromEnvironment(
-    'BACKEND_URL',
-    defaultValue: 'https://kanngrowbackend-production.up.railway.app/api/v1',
-  );
+  static String get _baseUrl => AdminNetworkConfig.baseUrl;
 
   static Future<Map<String, String>> _headers() async {
     final token = await TokenService.getToken();
@@ -192,6 +262,23 @@ class SubscriptionsService {
 
     if (response.statusCode != 200) {
       throw Exception('Failed to update plan: ${response.body}');
+    }
+  }
+
+  static Future<List<AdminPaymentTransaction>> getTransactions({int limit = 50, String? startAfter}) async {
+    String url = '$_baseUrl/admin/transactions?limit=$limit';
+    if (startAfter != null) {
+      url += '&startAfter=$startAfter';
+    }
+    final uri = Uri.parse(url);
+    final response = await http.get(uri, headers: await _headers());
+
+    if (response.statusCode == 200) {
+      final body = jsonDecode(response.body);
+      final list = body['data'] as List<dynamic>? ?? [];
+      return list.map((e) => AdminPaymentTransaction.fromJson(e as Map<String, dynamic>)).toList();
+    } else {
+      throw Exception('Failed to load transactions: ${response.body}');
     }
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../services/token_service.dart';
+import '../../core/admin_network_config.dart';
 
 // ── Data Models ──────────────────────────────────────────────────────────────
 
@@ -223,10 +224,7 @@ class AiLogResponse {
 // ── Service ──────────────────────────────────────────────────────────────────
 
 class AiManagementService {
-  static const String _baseUrl = String.fromEnvironment(
-    'BACKEND_URL',
-    defaultValue: 'https://kanngrowbackend-production.up.railway.app/api/v1',
-  );
+  static String get _baseUrl => AdminNetworkConfig.baseUrl;
 
   Future<Map<String, String>> _headers() async {
     final token = await TokenService.getToken();

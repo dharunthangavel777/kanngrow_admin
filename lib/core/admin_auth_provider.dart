@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
+import 'admin_network_config.dart';
 
 class AdminAuthProvider extends ChangeNotifier {
   bool _isLoggedIn = false;
@@ -27,7 +28,7 @@ class AdminAuthProvider extends ChangeNotifier {
   }
 
   String get _baseUrl {
-    return 'https://kanngrowbackend-production.up.railway.app/api/v1/admin/auth';
+    return '${AdminNetworkConfig.baseUrl}/admin/auth';
   }
 
   Future<bool> sendOtp(String email) async {

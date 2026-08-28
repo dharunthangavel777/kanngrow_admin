@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../users/users_service.dart';
+import '../dashboard/dashboard_service.dart';
 import 'subscriptions_service.dart';
 
 class SubscriptionsScreen extends StatefulWidget {
@@ -18,11 +19,64 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
   bool _loadingPlans = true;
   String? _plansError;
 
+  List<AdminPaymentTransaction> _transactions = [];
+  bool _loadingTransactions = true;
+  String? _transactionsError;
+
+  double _mrr = 0;
+  double _totalRevenue = 0;
+  int _activeSubscribers = 0;
+  int _totalUsers = 0;
+  bool _loadingStats = true;
+
   @override
   void initState() {
     super.initState();
+    _loadStats();
+    _loadTransactions();
     _loadAuditLogs();
     _loadPlans();
+  }
+
+  Future<void> _loadStats() async {
+    setState(() => _loadingStats = true);
+    try {
+      final stats = await DashboardService.getStats();
+      if (mounted) {
+        setState(() {
+          _mrr = stats.mrr;
+          _totalRevenue = stats.totalRevenueInr;
+          _activeSubscribers = stats.paidSubscribers;
+          _totalUsers = stats.totalUsers;
+          _loadingStats = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loadingStats = false);
+    }
+  }
+
+  Future<void> _loadTransactions() async {
+    setState(() {
+      _loadingTransactions = true;
+      _transactionsError = null;
+    });
+    try {
+      final list = await SubscriptionsService.getTransactions();
+      if (mounted) {
+        setState(() {
+          _transactions = list;
+          _loadingTransactions = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _transactionsError = e.toString();
+          _loadingTransactions = false;
+        });
+      }
+    }
   }
 
   Future<void> _loadPlans() async {
@@ -79,11 +133,11 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
         appBar: AppBar(
           title: Padding(
             padding: const EdgeInsets.only(top: 8.0),
-            child: Text('Subscriptions & Revenue', style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 24)),
+            child: Text('Subscriptions & Revenue (Razorpay Gateway)', style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 24)),
           ),
           bottom: const TabBar(
             tabs: [
-              Tab(text: 'REVENUE OVERVIEW'),
+              Tab(text: 'REVENUE & TRANSACTIONS'),
               Tab(text: 'MANUAL PLAN AUDIT LOGS'),
               Tab(text: 'MANAGE PLANS'),
             ],
@@ -91,7 +145,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
         ),
         body: TabBarView(
           children: [
-            // Tab 1: Revenue Overview
+            // Tab 1: Revenue & Transactions
             _buildRevenueOverviewTab(),
             // Tab 2: Manual Plan Audit Logs
             _buildAuditLogsTab(),
@@ -111,11 +165,23 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
         children: [
           Row(
             children: [
-              _StatCard(title: 'MRR (Monthly Recurring Revenue)', value: '\$24,500'),
+              _StatCard(
+                title: 'MRR (Monthly Recurring)',
+                value: _loadingStats ? '...' : '₹${_mrr.toStringAsFixed(0)}',
+                subtitle: 'Active Subscriptions in INR',
+              ),
               const SizedBox(width: 24),
-              _StatCard(title: 'Active Subscribers', value: '1,250'),
+              _StatCard(
+                title: 'Total Captured Revenue',
+                value: _loadingStats ? '...' : '₹${_totalRevenue.toStringAsFixed(0)}',
+                subtitle: 'Razorpay Gateway (Test Mode)',
+              ),
               const SizedBox(width: 24),
-              _StatCard(title: 'Churn Rate', value: '2.4%'),
+              _StatCard(
+                title: 'Paid Subscribers',
+                value: _loadingStats ? '...' : '$_activeSubscribers / $_totalUsers',
+                subtitle: 'Verified Customers',
+              ),
             ],
           ),
           const SizedBox(height: 32),
@@ -125,29 +191,126 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Recent Transactions', style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 16),
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: 6,
-                    separatorBuilder: (_, __) => const Divider(),
-                    itemBuilder: (context, index) {
-                      return ListTile(
-                        leading: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(Icons.check_circle, color: Colors.green),
-                        ),
-                        title: Text('Pro Plan Subscription - user${index}@email.com'),
-                        subtitle: const Text('Credit Card • Stripe'),
-                        trailing: const Text('+\$49.00', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16)),
-                      );
-                    },
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Recent Payment Transactions', style: Theme.of(context).textTheme.titleLarge),
+                          const SizedBox(height: 4),
+                          Text('Real-time payment logs captured via Razorpay Test Mode Gateway', style: TextStyle(fontSize: 12, color: Colors.grey[400])),
+                        ],
+                      ),
+                      IconButton(
+                        onPressed: () {
+                          _loadStats();
+                          _loadTransactions();
+                        },
+                        icon: const Icon(Icons.refresh),
+                        tooltip: 'Refresh Transactions',
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 16),
+                  if (_loadingTransactions)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(40.0),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else if (_transactionsError != null)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32.0),
+                        child: Column(
+                          children: [
+                            Text('Failed to load transactions: $_transactionsError', style: const TextStyle(color: Colors.red)),
+                            const SizedBox(height: 12),
+                            ElevatedButton(onPressed: _loadTransactions, child: const Text('Retry')),
+                          ],
+                        ),
+                      ),
+                    )
+                  else if (_transactions.isEmpty)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(48.0),
+                        child: Column(
+                          children: [
+                            Icon(Icons.payment_outlined, size: 48, color: Colors.grey[600]),
+                            const SizedBox(height: 12),
+                            const Text('No Razorpay transactions captured yet.', style: TextStyle(color: Colors.grey)),
+                            const SizedBox(height: 4),
+                            const Text('Transactions initiated in Kangrow AI App will appear here in real-time.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _transactions.length,
+                      separatorBuilder: (_, __) => const Divider(),
+                      itemBuilder: (context, index) {
+                        final tx = _transactions[index];
+                        final isSuccess = tx.status == 'captured';
+                        return ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: isSuccess ? Colors.green.withOpacity(0.1) : Colors.amber.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              isSuccess ? Icons.check_circle : Icons.hourglass_top,
+                              color: isSuccess ? Colors.green : Colors.amber,
+                            ),
+                          ),
+                          title: Row(
+                            children: [
+                              Text('${tx.planName} (${tx.billingCycle.toUpperCase()})', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.cyan.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  tx.mode.toUpperCase(),
+                                  style: const TextStyle(color: Colors.cyan, fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                          subtitle: Text(
+                            'User: ${tx.userName} (${tx.userEmail.isNotEmpty ? tx.userEmail : tx.uid}) • ID: ${tx.paymentId.isNotEmpty ? tx.paymentId : tx.orderId} • ${tx.createdAt.split('T')[0]}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          trailing: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                '+₹${tx.amount.toStringAsFixed(0)}',
+                                style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                              Text(
+                                tx.status.toUpperCase(),
+                                style: TextStyle(
+                                  color: isSuccess ? Colors.green : Colors.amber,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
                 ],
               ),
             ),
@@ -179,7 +342,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
       return RefreshIndicator(
         onRefresh: _loadAuditLogs,
         child: const Center(
-          child: Text('No manual plan assignment audit logs found.'),
+          child: Text('No manual plan assignment logs found.'),
         ),
       );
     }
@@ -189,93 +352,88 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
       child: ListView.separated(
         padding: const EdgeInsets.all(24),
         itemCount: _logs.length,
-        separatorBuilder: (_, __) => const Divider(height: 24),
+        separatorBuilder: (_, __) => const Divider(height: 1),
         itemBuilder: (context, index) {
           final log = _logs[index];
-          final timestamp = log.timestamp.isNotEmpty ? log.timestamp.split('T')[0] : 'N/A';
           return Card(
-            elevation: 1,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.only(bottom: 8),
             child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
                 children: [
-                  Row(
-                    children: [
-                      Icon(Icons.assignment_ind, color: Theme.of(context).primaryColor, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${log.previousPlan.toUpperCase()} ➔ ${log.newPlan.toUpperCase()}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                      ),
-                      const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).primaryColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          log.sourceType.toUpperCase(),
-                          style: TextStyle(
-                            color: Theme.of(context).primaryColor,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.cyan.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.history_edu, color: Colors.cyan),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        RichText(
+                          text: TextSpan(
+                            style: DefaultTextStyle.of(context).style,
+                            children: [
+                              TextSpan(text: log.adminName, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.cyan)),
+                              const TextSpan(text: ' changed plan for '),
+                              TextSpan(text: log.userName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            ],
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        const SizedBox(height: 4),
+                        Row(
                           children: [
-                            const Text('USER', style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 4),
-                            Text(log.userName, style: const TextStyle(fontWeight: FontWeight.w500)),
+                            _buildPlanBadge(log.previousPlan),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 8.0),
+                              child: Icon(Icons.arrow_forward, size: 14, color: Colors.grey),
+                            ),
+                            _buildPlanBadge(log.newPlan),
                           ],
                         ),
-                      ),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('ASSIGNED BY', style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 4),
-                            Text(log.adminName, style: const TextStyle(fontWeight: FontWeight.w500)),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('DATE', style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 4),
-                            Text(timestamp, style: const TextStyle(fontWeight: FontWeight.w500)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (log.reason.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    const Text('REASON / NOTES', style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text(
-                      log.reason,
-                      style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.black87),
+                        if (log.reason.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text('Reason: ${log.reason}', style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey)),
+                        ],
+                      ],
                     ),
-                  ],
+                  ),
+                  Text(
+                    log.timestamp.split('T')[0],
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                 ],
               ),
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildPlanBadge(String plan) {
+    final color = plan == 'enterprise'
+        ? Colors.purple
+        : plan == 'premium'
+            ? Colors.orange
+            : plan == 'standard'
+                ? Colors.blue
+                : Colors.grey;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withOpacity(0.5)),
+      ),
+      child: Text(
+        plan.toUpperCase(),
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
       ),
     );
   }
@@ -290,7 +448,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('Failed to load plans: $_plansError', style: const TextStyle(color: Colors.red)),
+            Text('Failed to load subscription plans: $_plansError', style: const TextStyle(color: Colors.red)),
             const SizedBox(height: 16),
             ElevatedButton(onPressed: _loadPlans, child: const Text('Retry')),
           ],
@@ -396,11 +554,11 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Pricing
-                    const Text('PRICING', style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
+                    const Text('PRICING (INR & USD)', style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
                     Text(
-                      'Monthly: \$${plan.pricing.monthlyUsd.toStringAsFixed(2)} | Annual: \$${plan.pricing.annualUsd.toStringAsFixed(2)}',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                      'Monthly: ₹${plan.pricing.monthlyInr.toStringAsFixed(0)} (\$${plan.pricing.monthlyUsd.toStringAsFixed(0)})  |  Annual: ₹${plan.pricing.annualInr.toStringAsFixed(0)} (\$${plan.pricing.annualUsd.toStringAsFixed(0)})',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.cyanAccent),
                     ),
                     const SizedBox(height: 12),
 
@@ -496,10 +654,10 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
     final formKey = GlobalKey<FormState>();
 
     // Controllers
-    final monthlyController = TextEditingController(text: plan.pricing.monthlyUsd.toString());
-    final annualController = TextEditingController(text: plan.pricing.annualUsd.toString());
-    final stripeMonthlyController = TextEditingController(text: plan.pricing.stripePriceIdMonthly);
-    final stripeAnnualController = TextEditingController(text: plan.pricing.stripePriceIdAnnual);
+    final monthlyInrController = TextEditingController(text: plan.pricing.monthlyInr.toStringAsFixed(0));
+    final annualInrController = TextEditingController(text: plan.pricing.annualInr.toStringAsFixed(0));
+    final monthlyUsdController = TextEditingController(text: plan.pricing.monthlyUsd.toString());
+    final annualUsdController = TextEditingController(text: plan.pricing.annualUsd.toString());
 
     final dailyRequestsController = TextEditingController(text: plan.limits.dailyRequests.toString());
     final monthlyTokensController = TextEditingController(text: plan.limits.monthlyTokens.toString());
@@ -544,7 +702,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Pricing Structure',
+                          'Pricing Structure (Razorpay INR & USD)',
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.cyan),
                         ),
                         const SizedBox(height: 8),
@@ -552,8 +710,8 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                           children: [
                             Expanded(
                               child: TextFormField(
-                                controller: monthlyController,
-                                decoration: const InputDecoration(labelText: 'Monthly Price (USD)'),
+                                controller: monthlyInrController,
+                                decoration: const InputDecoration(labelText: 'Monthly Price (INR ₹)', prefixText: '₹ '),
                                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                 validator: (v) => v == null || double.tryParse(v) == null ? 'Invalid price' : null,
                               ),
@@ -561,8 +719,8 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                             const SizedBox(width: 16),
                             Expanded(
                               child: TextFormField(
-                                controller: annualController,
-                                decoration: const InputDecoration(labelText: 'Annual Price (USD)'),
+                                controller: annualInrController,
+                                decoration: const InputDecoration(labelText: 'Annual Price (INR ₹)', prefixText: '₹ '),
                                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                 validator: (v) => v == null || double.tryParse(v) == null ? 'Invalid price' : null,
                               ),
@@ -574,15 +732,19 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                           children: [
                             Expanded(
                               child: TextFormField(
-                                controller: stripeMonthlyController,
-                                decoration: const InputDecoration(labelText: 'Stripe Monthly Price ID'),
+                                controller: monthlyUsdController,
+                                decoration: const InputDecoration(labelText: 'Monthly Price (USD \$)', prefixText: '\$ '),
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                validator: (v) => v == null || double.tryParse(v) == null ? 'Invalid price' : null,
                               ),
                             ),
                             const SizedBox(width: 16),
                             Expanded(
                               child: TextFormField(
-                                controller: stripeAnnualController,
-                                decoration: const InputDecoration(labelText: 'Stripe Annual Price ID'),
+                                controller: annualUsdController,
+                                decoration: const InputDecoration(labelText: 'Annual Price (USD \$)', prefixText: '\$ '),
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                validator: (v) => v == null || double.tryParse(v) == null ? 'Invalid price' : null,
                               ),
                             ),
                           ],
@@ -752,10 +914,10 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
 
                       final updatePayload = {
                         'pricing': {
-                          'monthlyUsd': double.parse(monthlyController.text),
-                          'annualUsd': double.parse(annualController.text),
-                          'stripePriceIdMonthly': stripeMonthlyController.text,
-                          'stripePriceIdAnnual': stripeAnnualController.text,
+                          'monthlyInr': double.parse(monthlyInrController.text),
+                          'annualInr': double.parse(annualInrController.text),
+                          'monthlyUsd': double.parse(monthlyUsdController.text),
+                          'annualUsd': double.parse(annualUsdController.text),
                         },
                         'limits': {
                           'dailyRequests': int.parse(dailyRequestsController.text),
@@ -788,34 +950,26 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                         
                         await SubscriptionsService.updatePlan(plan.id, updatePayload);
                         
-                        if (context.mounted) Navigator.pop(context);
-                        if (context.mounted) Navigator.pop(context);
-                        
-                        _loadPlans();
-
-                        if (mounted) {
+                        if (context.mounted) {
+                          Navigator.pop(context); // close loader
+                          Navigator.pop(context); // close edit dialog
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Plan "${plan.name}" updated successfully!'),
-                              backgroundColor: Colors.green,
-                            ),
+                            SnackBar(content: Text('Successfully updated ${plan.name} pricing & limits')),
                           );
+                          _loadPlans();
                         }
                       } catch (e) {
-                        if (context.mounted) Navigator.pop(context);
-                        
-                        if (mounted) {
+                        if (context.mounted) {
+                          Navigator.pop(context); // close loader
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Error updating plan: $e'),
-                              backgroundColor: Colors.red,
-                            ),
+                            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
                           );
                         }
                       }
                     }
                   },
-                  child: const Text('Save Changes'),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, foregroundColor: Colors.black),
+                  child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ],
             );
@@ -829,21 +983,33 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
 class _StatCard extends StatelessWidget {
   final String title;
   final String value;
+  final String? subtitle;
 
-  const _StatCard({required this.title, required this.value});
+  const _StatCard({required this.title, required this.value, this.subtitle});
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
       child: Card(
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.all(20.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: 16),
-              Text(value, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 28, color: Colors.green)),
+              Text(title, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey)),
+              const SizedBox(height: 8),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.cyan,
+                ),
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 4),
+                Text(subtitle!, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              ],
             ],
           ),
         ),

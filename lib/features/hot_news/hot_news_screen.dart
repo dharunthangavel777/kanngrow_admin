@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../../services/token_service.dart';
 import '../../core/theme.dart';
+import '../../core/admin_network_config.dart';
 
 // ── Data Models ───────────────────────────────────────────────────────────────
 
@@ -101,10 +102,7 @@ class _HotNewsScreenState extends State<HotNewsScreen>
   // Job run
   bool _jobRunning = false;
 
-  static const String _baseUrl = String.fromEnvironment(
-    'BACKEND_URL',
-    defaultValue: 'https://kanngrowbackend-production.up.railway.app/api/v1',
-  );
+  static String get _baseUrl => AdminNetworkConfig.baseUrl;
 
   @override
   void initState() {

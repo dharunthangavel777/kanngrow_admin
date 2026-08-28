@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/token_service.dart';
+import '../../core/admin_network_config.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -25,10 +26,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   String _emailTargetCategory = 'all';
   bool _isSendingEmail = false;
 
-  static const String _baseUrl = String.fromEnvironment(
-    'BACKEND_URL',
-    defaultValue: 'https://kanngrowbackend-production.up.railway.app/api/v1',
-  );
+  static String get _baseUrl => AdminNetworkConfig.baseUrl;
 
   @override
   void dispose() {
